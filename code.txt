@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CricketScan AI - Pro</title>
+    
+    <!-- 1. Fonts (Inter & JetBrains Mono) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+    <!-- 2. Tailwind CSS -->
+    <!-- Online: --> <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Offline: <script src="./libs/tailwind.js"></script> -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { 
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        obsidian: '#050505',
+                        charcoal: '#0f1115',
+                        glass: 'rgba(255, 255, 255, 0.03)',
+                        glassBorder: 'rgba(255, 255, 255, 0.08)',
+                        brand: {
+                            400: '#34d399', // Emerald 400
+                            500: '#10b981', // Emerald 500
+                            glow: 'rgba(16, 185, 129, 0.5)'
+                        }
+                    },
+                    boxShadow: {
+                        'neon': '0 0 20px rgba(16, 185, 129, 0.15)',
+                        'neon-hover': '0 0 30px rgba(16, 185, 129, 0.3)',
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- 3. React & ReactDOM -->
+    <!-- Online: -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Offline: 
+    <script src="./libs/react.js"></script>
+    <script src="./libs/react-dom.js"></script> 
+    -->
+    
+    <!-- 4. Babel -->
+    <!-- Online: --> <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Offline: <script src="./libs/babel.js"></script> -->
+
+    <!-- 5. Lucide Icons -->
+    <!-- Online: --> <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Offline: <script src="./libs/lucide.js"></script> -->
+
+    <!-- 6. WebM Duration Fixer (CRITICAL FOR SEEKING) -->
+    <!-- Online: --> <script src="https://unpkg.com/fix-webm-duration@1.0.5/fix-webm-duration.js"></script>
+    <!-- Offline: <script src="./libs/fix-webm-duration.js"></script> -->
+    
+    <style>
+        body { background-color: #050505; background-image: radial-gradient(circle at 50% 0%, #111827 0%, #050505 70%); }
+        
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #374151; border-radius: 20px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+
+        input[type=range] { -webkit-appearance: none; background: transparent; }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; height: 12px; width: 12px; border-radius: 50%;
+            background: #34d399; margin-top: -4px; box-shadow: 0 0 10px rgba(52, 211, 153, 0.8);
+            cursor: pointer; transition: all 0.2s; border: 2px solid #050505;
+        }
+        input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.3); box-shadow: 0 0 15px rgba(52, 211, 153, 1); }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: #1f2937; border-radius: 2px; }
+        
+        @keyframes scale-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        .animate-scale { animation: scale-in 0.2s ease-out forwards; }
+    </style>
+</head>
+<body class="text-slate-300 antialiased selection:bg-brand-500/30 selection:text-white">
+    <div id="root" class="h-screen w-screen flex flex-col"></div>
+
+    <script type="text/babel">
+        // --- FIX: EXPLICITLY CAPTURE GLOBALS ---
+        const React = window.React;
+        const ReactDOM = window.ReactDOM;
+
+        // Safety check to ensure libraries loaded
+        if (!React || !ReactDOM) {
+            document.getElementById('root').innerHTML = `
+                <div style="padding: 20px; color: #ef4444; font-family: sans-serif;">
+                    <h2 style="font-size: 24px; margin-bottom: 10px;">Critical Error: Libraries Failed to Load</h2>
+                    <p>React or ReactDOM could not be found. Please check:</p>
+                    <ul style="margin-top: 10px; list-style: disc; padding-left: 20px;">
+                        <li>If online: Check your internet connection.</li>
+                        <li>If offline: Ensure you have downloaded the files into a 'libs' folder and uncommented the offline scripts in the HTML code.</li>
+                    </ul>
+                </div>
+            `;
+            throw new Error("React/ReactDOM not found");
+        }
+
+        const { useState, useRef, useEffect } = React;
+        
+        // --- ICON COMPONENT ---
+        const Icon = ({ name, size = 24, className }) => {
+            const ref = useRef(null);
+            useEffect(() => {
+                if (!window.lucide || !ref.current) return;
+                ref.current.innerHTML = '';
+                const pascalName = name.split('-').map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join('');
+                const iconData = window.lucide.icons[pascalName];
+                if (iconData) {
+                    const svgElement = window.lucide.createElement(iconData);
+                    svgElement.setAttribute('width', size);
+                    svgElement.setAttribute('height', size);
+                    if (className) {
+                        const existingClass = svgElement.getAttribute('class') || '';
+                        svgElement.setAttribute('class', `${existingClass} ${className}`);
+                    }
+                    ref.current.appendChild(svgElement);
+                }
+            }, [name, size, className]);
+            return <span ref={ref} className="inline-flex items-center justify-center"></span>;
+        };
+
+        const getColorDistance = (c1, c2) => Math.sqrt(Math.pow(c1.r - c2.r, 2) + Math.pow(c1.g - c2.g, 2) + Math.pow(c1.b - c2.b, 2));
+
+        const getAverageColor = (imageData) => {
+            let r = 0, g = 0, b = 0;
+            const totalPixels = imageData.width * imageData.height;
+            for (let i = 0; i < imageData.data.length; i += 4) {
+                r += imageData.data[i];
+                g += imageData.data[i + 1];
+                b += imageData.data[i + 2];
+            }
+            return {
+                r: Math.round(r / totalPixels),
+                g: Math.round(g / totalPixels),
+                b: Math.round(b / totalPixels),
+            };
+        };
+
+        const rgbToHex = ({ r, g, b }) => "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+
+        const App = () => {
+            const [videoSrc, setVideoSrc] = useState(null);
+            const [triggers, setTriggers] = useState([]);
+            const [highlights, setHighlights] = useState([]);
+            const [isScanning, setIsScanning] = useState(false);
+            const [isExporting, setIsExporting] = useState(false);
+            const [progress, setProgress] = useState(0); 
+            const [currentTime, setCurrentTime] = useState(0);
+            const [duration, setDuration] = useState(0);
+            const [isPlaying, setIsPlaying] = useState(false);
+            
+            const [preRoll, setPreRoll] = useState(5); 
+            const [clipDuration, setClipDuration] = useState(10); 
+            const [scanSpeed, setScanSpeed] = useState(5); 
+
+            const [isDrawing, setIsDrawing] = useState(false);
+            const [startPos, setStartPos] = useState(null);
+            const [currentRect, setCurrentRect] = useState(null);
+            const [showTriggerModal, setShowTriggerModal] = useState(false);
+            const [tempTriggerColor, setTempTriggerColor] = useState(null);
+            const [newTriggerName, setNewTriggerName] = useState("Highlight Point"); 
+            const [resetKey, setResetKey] = useState(0); 
+
+            const videoRef = useRef(null);
+            const canvasRef = useRef(null);
+            const containerRef = useRef(null);
+            const scanRequestRef = useRef(null);
+
+            const handleFileUpload = (event) => {
+                const file = event.target.files[0];
+                event.target.value = '';
+                if (file) {
+                    try {
+                        const url = URL.createObjectURL(file);
+                        setVideoSrc(url);
+                        setHighlights([]);
+                        setTriggers([]);
+                        setProgress(0);
+                        setIsPlaying(false);
+                    } catch (err) {
+                        alert("Error loading: " + err.message);
+                    }
+                }
+            };
+
+            const resetApp = () => {
+                if (window.confirm("Start over? This will clear the current project.")) {
+                    if (scanRequestRef.current) cancelAnimationFrame(scanRequestRef.current);
+                    if (videoSrc) URL.revokeObjectURL(videoSrc);
+                    setVideoSrc(null);
+                    setTriggers([]);
+                    setHighlights([]);
+                    setProgress(0);
+                    setCurrentTime(0);
+                    setDuration(0);
+                    setIsPlaying(false);
+                    setIsScanning(false);
+                    setIsExporting(false);
+                    setResetKey(prev => prev + 1); 
+                }
+            };
+
+            const deleteHighlight = (indexToDelete) => {
+                setHighlights(prev => prev.filter((_, index) => index !== indexToDelete));
+            };
+
+            const handleTimeUpdate = () => {
+                if (videoRef.current && !isScanning && !isExporting) {
+                    setCurrentTime(videoRef.current.currentTime);
+                }
+            };
+
+            const handleLoadedMetadata = () => {
+                if (videoRef.current) setDuration(videoRef.current.duration);
+            };
+
+            const togglePlay = () => {
+                if (videoRef.current) {
+                    if (isPlaying) videoRef.current.pause();
+                    else videoRef.current.play();
+                    setIsPlaying(!isPlaying);
+                }
+            };
+
+            const startDrawing = (e) => {
+                if (!videoSrc || isScanning || isExporting) return;
+                const rect = containerRef.current.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                setIsDrawing(true);
+                setStartPos({ x, y });
+                setCurrentRect({ x, y, w: 0, h: 0 });
+            };
+
+            const draw = (e) => {
+                if (!isDrawing) return;
+                const rect = containerRef.current.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                setCurrentRect({
+                    x: Math.min(x, startPos.x),
+                    y: Math.min(y, startPos.y),
+                    w: Math.abs(x - startPos.x),
+                    h: Math.abs(y - startPos.y)
+                });
+            };
+
+            const endDrawing = () => {
+                if (!isDrawing) return;
+                setIsDrawing(false);
+                if (currentRect && currentRect.w > 10 && currentRect.h > 10) {
+                    analyzeRegionForTrigger();
+                } else {
+                    setCurrentRect(null);
+                }
+            };
+
+            const analyzeRegionForTrigger = () => {
+                if (!videoRef.current || !canvasRef.current) return;
+                const video = videoRef.current;
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                const displayRect = containerRef.current.getBoundingClientRect();
+                const scaleX = video.videoWidth / displayRect.width;
+                const scaleY = video.videoHeight / displayRect.height;
+
+                const region = {
+                    x: Math.floor(currentRect.x * scaleX),
+                    y: Math.floor(currentRect.y * scaleY),
+                    w: Math.floor(currentRect.w * scaleX),
+                    h: Math.floor(currentRect.h * scaleY),
+                };
+
+                try {
+                    const imageData = ctx.getImageData(region.x, region.y, region.w, region.h);
+                    const avgColor = getAverageColor(imageData);
+                    setTempTriggerColor(avgColor);
+                    setNewTriggerName("Highlight Point"); 
+                    setShowTriggerModal(true);
+                } catch (e) {
+                    console.error("Image Data Error", e);
+                    setCurrentRect(null);
+                }
+            };
+
+            const saveTrigger = () => {
+                const newTrigger = {
+                    id: Date.now(),
+                    rect: currentRect,
+                    color: tempTriggerColor,
+                    label: newTriggerName || "Highlight Point",
+                    tolerance: 50
+                };
+                setTriggers([...triggers, newTrigger]);
+                setShowTriggerModal(false);
+                setCurrentRect(null);
+            };
+
+            const stopScan = () => {
+                if (scanRequestRef.current) cancelAnimationFrame(scanRequestRef.current);
+                setIsScanning(false);
+                if (videoRef.current) {
+                    videoRef.current.pause();
+                    videoRef.current.playbackRate = 1.0;
+                    videoRef.current.muted = false;
+                    videoRef.current.currentTime = 0;
+                }
+                setProgress(0);
+            };
+
+            const startScan = async () => {
+                if (!videoRef.current || triggers.length === 0) return;
+                setIsScanning(true);
+                setHighlights([]);
+                const video = videoRef.current;
+                const canvas = document.createElement('canvas'); 
+                const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                
+                video.muted = true;
+                try { await video.play(); } catch(err) { console.error("Autoplay failed", err); }
+                video.playbackRate = scanSpeed;
+
+                let lastCheckTime = -1;
+                const checkInterval = 0.5;
+                let lastMatchTime = -10; 
+
+                const processLoop = () => {
+                    if (video.paused || video.ended) {
+                        stopScan();
+                        return;
+                    }
+
+                    const vTime = video.currentTime;
+                    setProgress((vTime / video.duration) * 100);
+
+                    if (vTime - lastCheckTime >= checkInterval) {
+                        lastCheckTime = vTime;
+                        
+                        if (vTime - lastMatchTime < 10) {
+                            // Cooldown active
+                        } else {
+                            canvas.width = video.videoWidth;
+                            canvas.height = video.videoHeight;
+                            ctx.drawImage(video, 0, 0);
+
+                            const displayRect = containerRef.current.getBoundingClientRect();
+                            const scaleX = video.videoWidth / displayRect.width;
+                            const scaleY = video.videoHeight / displayRect.height;
+
+                            let matchedLabel = null;
+
+                            for (let trigger of triggers) {
+                                const region = {
+                                    x: Math.floor(trigger.rect.x * scaleX),
+                                    y: Math.floor(trigger.rect.y * scaleY),
+                                    w: Math.floor(trigger.rect.w * scaleX),
+                                    h: Math.floor(trigger.rect.h * scaleY),
+                                };
+                                if (region.w <= 0 || region.h <= 0) continue;
+
+                                const imageData = ctx.getImageData(region.x, region.y, region.w, region.h);
+                                const avgColor = getAverageColor(imageData);
+                                const distance = getColorDistance(avgColor, trigger.color);
+
+                                if (distance < trigger.tolerance) {
+                                    matchedLabel = trigger.label;
+                                    break;
+                                }
+                            }
+
+                            if (matchedLabel) {
+                                lastMatchTime = vTime; 
+                                setHighlights(prev => {
+                                    const last = prev[prev.length - 1];
+                                    if (last && (vTime - last.eventTime < 10)) return prev;
+                                    const adjustedStartTime = Math.max(0, vTime - preRoll);
+                                    return [...prev, { 
+                                        time: adjustedStartTime,
+                                        eventTime: vTime, 
+                                        type: matchedLabel, 
+                                        thumbnail: canvas.toDataURL('image/jpeg', 0.5) 
+                                    }];
+                                });
+                            }
+                        }
+                    }
+                    scanRequestRef.current = requestAnimationFrame(processLoop);
+                };
+                scanRequestRef.current = requestAnimationFrame(processLoop);
+            };
+
+            // --- EXPORT LOGIC (WebM + Seeking Fix) ---
+            const exportHighlights = async () => {
+                if (highlights.length === 0 || !videoRef.current) return;
+                setIsExporting(true);
+                setProgress(0);
+                
+                const video = videoRef.current;
+                const originalTime = video.currentTime;
+                
+                video.pause();
+                video.playbackRate = 1.0; 
+                video.muted = false;
+                video.volume = 1.0;
+
+                const exportCanvas = document.createElement('canvas');
+                // Ensure same resolution as source video
+                exportCanvas.width = video.videoWidth; 
+                exportCanvas.height = video.videoHeight;
+                const ctx = exportCanvas.getContext('2d', { alpha: false }); 
+
+                let audioStream;
+                if (video.captureStream) audioStream = video.captureStream();
+                else if (video.mozCaptureStream) audioStream = video.mozCaptureStream();
+                else {
+                    alert("Browser does not support capturing video stream.");
+                    setIsExporting(false);
+                    return;
+                }
+
+                const audioTracks = audioStream.getAudioTracks();
+                const canvasStream = exportCanvas.captureStream(60); 
+                const finalStream = new MediaStream([
+                    ...canvasStream.getVideoTracks(),
+                    ...(audioTracks.length > 0 ? [audioTracks[0]] : [])
+                ]);
+
+                // FORCE WEBM (VP9/VP8) for best browser support
+                let mimeType = "video/webm;codecs=vp9,opus"; 
+                if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = "video/webm;codecs=vp8,opus";
+                if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = "video/webm"; 
+
+                // 10 Mbps for High Quality
+                const recorder = new MediaRecorder(finalStream, { 
+                    mimeType, 
+                    videoBitsPerSecond: 10000000 
+                });
+
+                const chunks = [];
+                recorder.ondataavailable = (e) => {
+                    if (e.data.size > 0) chunks.push(e.data);
+                };
+
+                // Request data more frequently to keep memory usage smooth
+                recorder.start(1000);
+                recorder.pause();
+
+                const sortedHighlights = [...highlights].sort((a, b) => a.time - b.time);
+                let animationFrameId;
+                let currentClipData = null;
+                let previousClipFrame = null; 
+
+                const renderLoop = () => {
+                    if (!video.paused && !video.ended && currentClipData) {
+                        const t = video.currentTime;
+                        const { start } = currentClipData;
+                        const transitionData = currentClipData.transitionFrame;
+                        const fadeDuration = 0.6; // 0.6s Wipe
+
+                        // --- WIPE FROM LEFT LOGIC ---
+                        if (transitionData && t >= start && t < start + fadeDuration) {
+                            const progress = (t - start) / fadeDuration; 
+                            const wipeX = exportCanvas.width * progress;
+
+                            // 1. Draw NEW video first (The layer underneath)
+                            ctx.drawImage(video, 0, 0, exportCanvas.width, exportCanvas.height);
+
+                            // 2. Draw OLD video on top, masking out the left side
+                            ctx.save();
+                            ctx.beginPath();
+                            ctx.rect(wipeX, 0, exportCanvas.width - wipeX, exportCanvas.height);
+                            ctx.clip();
+                            ctx.drawImage(transitionData, 0, 0, exportCanvas.width, exportCanvas.height);
+                            ctx.restore();
+
+                            // 3. Draw Green Wipe Line
+                            ctx.save();
+                            ctx.beginPath();
+                            ctx.moveTo(wipeX, 0);
+                            ctx.lineTo(wipeX, exportCanvas.height);
+                            ctx.strokeStyle = '#10b981'; // Emerald 500
+                            ctx.lineWidth = 15;
+                            ctx.lineCap = 'butt';
+                            ctx.shadowColor = '#34d399';
+                            ctx.shadowBlur = 20;
+                            ctx.stroke();
+                            ctx.restore();
+
+                        } else {
+                            // Normal Drawing
+                            ctx.drawImage(video, 0, 0, exportCanvas.width, exportCanvas.height);
+                        }
+                    }
+                    animationFrameId = requestAnimationFrame(renderLoop);
+                };
+                
+                renderLoop();
+
+                for (let i = 0; i < sortedHighlights.length; i++) {
+                    const h = sortedHighlights[i];
+                    const start = h.time;
+                    const end = Math.min(video.duration, start + clipDuration);
+                    
+                    currentClipData = { start, end, transitionFrame: previousClipFrame };
+
+                    const preBuffer = 2.0; 
+                    const seekTarget = Math.max(0, start - preBuffer);
+                    const isRollingStart = start > preBuffer; 
+
+                    video.currentTime = seekTarget;
+                    
+                    // Robust Seek Wait
+                    await new Promise(resolve => {
+                        const onSeeked = () => {
+                            video.removeEventListener('seeked', onSeeked);
+                            setTimeout(resolve, 500); 
+                        };
+                        video.addEventListener('seeked', onSeeked);
+                        // Fallback
+                        setTimeout(() => {
+                            video.removeEventListener('seeked', onSeeked);
+                            resolve();
+                        }, 3000); 
+                    });
+
+                    // Ensure video is strictly ready
+                    if (video.readyState < 3) {
+                       await new Promise(resolve => {
+                           const onCanPlay = () => {
+                               video.removeEventListener('canplay', onCanPlay);
+                               resolve();
+                           }
+                           video.addEventListener('canplay', onCanPlay);
+                           setTimeout(resolve, 3000);
+                       });
+                    }
+
+                    try { await video.play(); } catch (e) { console.error("Playback failed", e); }
+
+                    if (isRollingStart) {
+                        await new Promise(resolve => {
+                            const checkFrame = () => {
+                                if (video.paused) { resolve(); return; }
+                                // Epsilon check to fix "stuck" issue
+                                if (video.currentTime >= start - 0.1) { resolve(); } 
+                                else { requestAnimationFrame(checkFrame); }
+                            };
+                            requestAnimationFrame(checkFrame);
+                        });
+                    }
+
+                    if (recorder.state === "paused") recorder.resume();
+
+                    await new Promise(resolve => {
+                        const checkEndFrame = () => {
+                            if (video.paused) { resolve(); return; }
+                            // Epsilon check
+                            if (video.currentTime >= end - 0.1) { resolve(); } 
+                            else { requestAnimationFrame(checkEndFrame); }
+                        };
+                        requestAnimationFrame(checkEndFrame);
+                    });
+
+                    // Capture frame for NEXT transition
+                    const frameCapture = document.createElement('canvas');
+                    frameCapture.width = exportCanvas.width;
+                    frameCapture.height = exportCanvas.height;
+                    frameCapture.getContext('2d').drawImage(exportCanvas, 0, 0);
+                    previousClipFrame = frameCapture; 
+
+                    video.pause();
+                    recorder.pause();
+                    setProgress(Math.round(((i + 1) / sortedHighlights.length) * 100));
+                }
+
+                cancelAnimationFrame(animationFrameId);
+                recorder.stop();
+                
+                // IMPORTANT: Wait for stop, then patch duration, then download
+                await new Promise(resolve => { recorder.onstop = resolve; });
+
+                const rawBlob = new Blob(chunks, { type: mimeType });
+                const totalDurationMs = sortedHighlights.length * clipDuration * 1000;
+                
+                const downloadBlob = (blobToDownload) => {
+                    const url = URL.createObjectURL(blobToDownload);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `cricket_highlights.webm`; 
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    
+                    setIsExporting(false);
+                    setProgress(0);
+                    video.currentTime = originalTime;
+                };
+
+                // Try to patch metadata for seeking using ysFixWebmDuration if available
+                if (window.ysFixWebmDuration) {
+                    try {
+                        ysFixWebmDuration(rawBlob, totalDurationMs, (fixedBlob) => {
+                            downloadBlob(fixedBlob);
+                        });
+                    } catch (e) {
+                        console.error("Fix duration failed", e);
+                        downloadBlob(rawBlob);
+                    }
+                } else {
+                    downloadBlob(rawBlob);
+                }
+            };
+
+            const formatTime = (seconds) => {
+                const mins = Math.floor(seconds / 60);
+                const secs = Math.floor(seconds % 60);
+                return `${mins}:${secs.toString().padStart(2, '0')}`;
+            };
+
+            const jumpToTime = (time) => {
+                if (videoRef.current) {
+                    videoRef.current.currentTime = time;
+                    setIsPlaying(false);
+                    videoRef.current.pause();
+                }
+            };
+
+            return (
+                <div className="flex flex-col h-screen overflow-hidden bg-obsidian font-sans text-slate-300">
+                    {/* --- HEADER --- */}
+                    <header className="h-16 border-b border-glassBorder bg-charcoal/80 backdrop-blur-xl flex items-center justify-between px-6 shrink-0 relative z-30 shadow-2xl">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-neon relative group overflow-hidden">
+                                <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
+                                <Icon name="video" size={20} className="text-white drop-shadow-md" />
+                            </div>
+                            <div className="flex flex-col">
+                                <h1 className="font-extrabold text-xl tracking-tight leading-none text-white">
+                                    Cricket<span className="text-emerald-400">Scan</span>
+                                </h1>
+                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">AI Highlights Pro</span>
+                            </div>
+                        </div>
+                        
+                        {/* Credits Badge - Yellow Spotlight */}
+                        <div className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 hidden md:flex items-center gap-2 px-5 py-2 rounded-full border border-yellow-500/30 bg-yellow-900/10 backdrop-blur-md shadow-[0_0_20px_rgba(234,179,8,0.2)] group hover:shadow-[0_0_30px_rgba(234,179,8,0.4)] transition-all duration-300 cursor-default">
+                            <span className="text-xs font-semibold text-yellow-100 uppercase tracking-wider opacity-80">Created by</span>
+                            <span className="text-sm font-bold text-yellow-400 drop-shadow-[0_0_5px_rgba(234,179,8,0.8)] tracking-wide">Amanullah Khan</span>
+                        </div>
+
+                        <div className="flex items-center gap-4">
+                            {!videoSrc && (
+                                <label key={resetKey} className="group flex items-center gap-2 px-5 py-2.5 bg-brand-500 hover:bg-brand-400 text-white rounded-lg cursor-pointer transition-all shadow-neon hover:shadow-neon-hover font-semibold transform hover:-translate-y-0.5">
+                                    <Icon name="upload" size={18} />
+                                    <span className="text-sm">Upload</span>
+                                    <input type="file" accept="video/*" className="hidden" onChange={handleFileUpload} />
+                                </label>
+                            )}
+                            {videoSrc && !isScanning && !isExporting && (
+                                <>
+                                    <button onClick={resetApp} className="flex items-center gap-2 px-4 py-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition text-xs font-bold uppercase tracking-wider border border-transparent hover:border-glassBorder" title="Reset">
+                                        <Icon name="rotate-ccw" size={14} />
+                                        Reset
+                                    </button>
+                                    <button onClick={startScan} disabled={triggers.length === 0} 
+                                        className={`flex items-center gap-2 px-5 py-2.5 rounded-lg font-bold transition shadow-lg transform hover:-translate-y-0.5 ${triggers.length > 0 ? 'bg-brand-500 hover:bg-brand-400 text-black shadow-neon' : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'}`}>
+                                        <Icon name="zap" size={18} className={triggers.length > 0 ? "fill-black" : ""} />
+                                        Start Scan
+                                    </button>
+                                </>
+                            )}
+                            {(isScanning || isExporting) && (
+                                <div className="flex items-center gap-4 px-5 py-2 bg-charcoal border border-brand-500/30 rounded-lg shadow-neon">
+                                    <div className="flex items-center gap-3">
+                                        <div className="relative flex h-2.5 w-2.5">
+                                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                                        </div>
+                                        <span className="text-xs font-mono font-bold text-emerald-400 uppercase tracking-widest">
+                                            {isExporting ? 'Exporting' : 'Scanning'} {Math.round(progress)}%
+                                        </span>
+                                    </div>
+                                    {isScanning && (
+                                        <button onClick={stopScan} className="p-1.5 rounded-md hover:bg-red-500/20 text-red-400 hover:text-red-300 transition"><Icon name="x" size={14} /></button>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </header>
+
+                    {/* --- MAIN LAYOUT (DUAL SIDEBAR) --- */}
+                    <div className="flex flex-1 overflow-hidden">
+
+                        {/* 1. LEFT SIDEBAR: HIGHLIGHTS */}
+                        <div className="w-72 bg-charcoal/95 border-r border-slate-800 flex flex-col shrink-0 z-20 shadow-2xl backdrop-blur-xl">
+                            <div className="p-6 border-b border-slate-800 flex items-center justify-between bg-charcoal/90">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-1.5 bg-brand-500/10 rounded-lg">
+                                        <Icon name="clapperboard" size={16} className="text-emerald-400" />
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <h2 className="text-xs font-bold uppercase tracking-widest text-white">Highlights</h2>
+                                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">{highlights.length} found</span>
+                                    </div>
+                                </div>
+
+                                {highlights.length > 0 && (
+                                    <button onClick={exportHighlights} disabled={isExporting} 
+                                        className="flex items-center justify-center gap-2 p-3 bg-gradient-to-br from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white rounded-xl shadow-lg shadow-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105 transition-all w-12 h-12" title="Export Highlights">
+                                        {isExporting ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <Icon name="download" size={20} />}
+                                    </button>
+                                )}
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+                                {highlights.length === 0 ? 
+                                    <div className="flex flex-col items-center justify-center h-full text-slate-700 space-y-4">
+                                        <div className="w-16 h-16 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center">
+                                            <Icon name="history" size={32} strokeWidth={1.5} />
+                                        </div>
+                                        <p className="text-xs font-medium">Timeline empty</p>
+                                    </div> 
+                                : 
+                                highlights.map((h, i) => (
+                                    <div key={i} className="group relative w-full flex items-center gap-3 p-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-emerald-500/30 rounded-xl transition-all duration-200 cursor-pointer overflow-hidden shadow-sm hover:shadow-lg">
+                                        {/* Click area to jump */}
+                                        <div className="flex-1 flex items-center gap-3" onClick={() => jumpToTime(h.time)}>
+                                            <div className="relative w-16 h-10 bg-black rounded overflow-hidden shrink-0 border border-slate-700/50 shadow-inner group-hover:border-emerald-500/20 transition-colors">
+                                                {h.thumbnail && <img src={h.thumbnail} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition duration-300" alt="thumb"/>}
+                                                <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-transparent transition">
+                                                    <Icon name="play" size={12} className="text-white opacity-50 group-hover:opacity-100 transition-all scale-90 group-hover:scale-110 drop-shadow-md fill-current" />
+                                                </div>
+                                            </div>
+                                            <div className="flex flex-col gap-1 min-w-0">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded shadow-sm border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 truncate max-w-[80px]">
+                                                        {h.type}
+                                                    </span>
+                                                </div>
+                                                <span className="text-[10px] font-mono text-slate-500">@{formatTime(h.eventTime)}</span>
+                                            </div>
+                                        </div>
+                                        
+                                        {/* Delete Button */}
+                                        <button onClick={(e) => { e.stopPropagation(); deleteHighlight(i); }} 
+                                            className="absolute right-2 p-2 rounded-lg bg-charcoal text-slate-500 hover:text-white hover:bg-red-500/80 opacity-0 group-hover:opacity-100 transition-all transform translate-x-2 group-hover:translate-x-0 shadow-lg border border-slate-700 hover:border-red-500">
+                                            <Icon name="trash-2" size={14} />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        
+                        {/* 2. CENTER: Video Stage */}
+                        <div className="flex-1 bg-[#020202] relative flex flex-col justify-center items-center overflow-hidden group">
+                            {/* Ambient Glow */}
+                            <div className="absolute inset-0 bg-radial-gradient from-emerald-900/10 to-transparent pointer-events-none"></div>
+                            
+                            {!videoSrc ? (
+                                <div className="text-center p-12 border border-dashed border-slate-800 rounded-3xl bg-charcoal/50 backdrop-blur-sm max-w-md mx-6 hover:border-slate-700 transition duration-500">
+                                    <div className="w-20 h-20 bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl flex items-center justify-center mx-auto mb-6 text-slate-600 shadow-xl border border-slate-800/50">
+                                        <Icon name="film" size={32} />
+                                    </div>
+                                    <h3 className="text-lg font-bold text-white mb-2">Start New Project</h3>
+                                    <p className="text-slate-500 text-sm leading-relaxed">Upload your match recording (MP4/WebM) to begin detecting highlights automatically.</p>
+                                </div>
+                            ) : (
+                                <>
+                                    <div ref={containerRef} className="relative shadow-2xl w-full max-w-[90%] aspect-video bg-black rounded-xl overflow-hidden border border-slate-800 ring-1 ring-white/5"
+                                        onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={endDrawing}
+                                        style={{ cursor: isDrawing ? 'crosshair' : 'default' }}>
+                                        <video ref={videoRef} src={videoSrc} className="w-full h-full object-contain" 
+                                            onTimeUpdate={handleTimeUpdate} onLoadedMetadata={handleLoadedMetadata} crossOrigin="anonymous" playsInline 
+                                        />
+                                        <canvas ref={canvasRef} className="hidden" />
+                                        
+                                        {/* Drawing Box */}
+                                        {currentRect && (
+                                            <div className="absolute border-2 border-emerald-400 bg-emerald-500/10 backdrop-blur-[2px] shadow-[0_0_30px_rgba(16,185,129,0.2)] rounded-sm"
+                                                style={{ left: currentRect.x, top: currentRect.y, width: currentRect.w, height: currentRect.h }} />
+                                        )}
+                                        
+                                        {/* Trigger Overlays */}
+                                        {triggers.map(t => (
+                                            <div key={t.id} className="absolute border-2 border-yellow-400/60 bg-yellow-400/5 hover:bg-yellow-400/10 transition-colors"
+                                                style={{ left: t.rect.x, top: t.rect.y, width: t.rect.w, height: t.rect.h }}>
+                                                <div className="absolute -top-8 left-0 flex items-center gap-1.5 bg-yellow-500 text-black text-[10px] font-bold px-2 py-1 rounded shadow-lg">
+                                                    <div className="w-2 h-2 rounded-full bg-black/50 animate-pulse"></div>
+                                                    {t.label}
+                                                </div>
+                                            </div>
+                                        ))}
+
+                                        {/* Video Controls */}
+                                        <div className={`absolute bottom-0 left-0 right-0 p-6 pt-12 bg-gradient-to-t from-black via-black/80 to-transparent transition-opacity duration-300 flex items-center gap-5 ${isExporting ? 'opacity-0 pointer-events-none' : 'opacity-0 group-hover:opacity-100'}`}>
+                                            <button onClick={togglePlay} className="h-12 w-12 flex items-center justify-center bg-white/10 hover:bg-white/20 hover:scale-105 rounded-full backdrop-blur-md text-white transition shadow-lg border border-white/10">
+                                                {isPlaying ? <Icon name="pause" size={24} className="fill-current" /> : <Icon name="play" size={24} className="fill-current ml-1" />}
+                                            </button>
+                                            <div className="flex-1 flex flex-col gap-2">
+                                                <input type="range" min="0" max={duration || 100} value={currentTime} 
+                                                    onChange={(e) => { const t = Number(e.target.value); videoRef.current.currentTime = t; setCurrentTime(t); }}
+                                                    className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-emerald-500 hover:bg-white/20 transition-colors"
+                                                />
+                                                <div className="flex justify-between text-[10px] font-mono font-bold text-slate-400 tracking-wider">
+                                                    <span>{formatTime(currentTime)}</span>
+                                                    <span>{formatTime(duration)}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Export Overlay */}
+                                        {isExporting && (
+                                            <div className="absolute inset-0 bg-black/95 backdrop-blur-md flex flex-col items-center justify-center z-50">
+                                                <div className="text-center space-y-8 animate-scale">
+                                                    <div className="relative inline-block">
+                                                        <div className="absolute inset-0 bg-emerald-500 blur-2xl opacity-20 rounded-full animate-pulse"></div>
+                                                        <Icon name="film" size={80} className="text-emerald-500 relative z-10" />
+                                                    </div>
+                                                    <div>
+                                                        <h2 className="text-3xl font-extrabold text-white mb-2 tracking-tight">Exporting Highlight Reel</h2>
+                                                        <div className="flex items-center justify-center gap-2 text-slate-400 text-sm">
+                                                            <span className="px-2 py-0.5 bg-slate-800 rounded border border-slate-700">Native Resolution</span>
+                                                            <span className="px-2 py-0.5 bg-slate-800 rounded border border-slate-700">WebM</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="w-80 h-1 bg-slate-800 rounded-full overflow-hidden mx-auto">
+                                                        <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-300 ease-out shadow-[0_0_10px_#10b981]" style={{ width: `${progress}%` }}></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Helper Hint */}
+                                    {triggers.length === 0 && (
+                                        <div className="absolute top-8 bg-charcoal/80 backdrop-blur-xl border border-glassBorder text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 animate-scale pointer-events-none">
+                                            <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400">
+                                                <Icon name="scan-eye" size={20} />
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-bold">Create a Trigger</p>
+                                                <p className="text-xs text-slate-400 mt-0.5">Pause video on highlight &rarr; Draw box</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+
+                        {/* 3. RIGHT SIDEBAR: CONFIG & TRIGGERS */}
+                        <div className="w-72 bg-charcoal/95 border-l border-slate-800 flex flex-col shrink-0 z-20 shadow-2xl backdrop-blur-xl">
+                            
+                            {/* Panel: Settings */}
+                            <div className="p-6 border-b border-slate-800/50">
+                                <div className="flex items-center gap-2 mb-5 text-white">
+                                    <Icon name="sliders-horizontal" size={16} className="text-emerald-400" />
+                                    <h2 className="text-xs font-bold uppercase tracking-widest text-slate-400">Configuration</h2>
+                                </div>
+                                <div className="space-y-6">
+                                    <div className="group">
+                                        <div className="flex justify-between text-xs font-semibold text-slate-400 mb-2.5">
+                                            <span>Scan Speed</span><span className="text-emerald-400 bg-emerald-500/10 px-1.5 rounded">{scanSpeed}x</span>
+                                        </div>
+                                        <input type="range" min="1" max="8" step="1" value={scanSpeed} onChange={(e) => setScanSpeed(Number(e.target.value))} className="w-full" />
+                                    </div>
+                                    <div>
+                                        <div className="flex justify-between text-xs font-semibold text-slate-400 mb-2.5">
+                                            <span>Pre-roll</span><span className="text-emerald-400 bg-emerald-500/10 px-1.5 rounded">{preRoll}s</span>
+                                        </div>
+                                        <input type="range" min="0" max="30" step="1" value={preRoll} onChange={(e) => setPreRoll(Number(e.target.value))} className="w-full" />
+                                    </div>
+                                    <div>
+                                        <div className="flex justify-between text-xs font-semibold text-slate-400 mb-2.5">
+                                            <span>Duration</span><span className="text-emerald-400 bg-emerald-500/10 px-1.5 rounded">{clipDuration}s</span>
+                                        </div>
+                                        <input type="range" min="5" max="60" step="1" value={clipDuration} onChange={(e) => setClipDuration(Number(e.target.value))} className="w-full" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Panel: Triggers */}
+                            <div className="p-6 border-b border-slate-800/50 bg-slate-900/30">
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="flex items-center gap-2 text-white">
+                                        <Icon name="target" size={16} className="text-emerald-400" />
+                                        <h2 className="text-xs font-bold uppercase tracking-widest text-slate-400">Triggers</h2>
+                                    </div>
+                                    <span className="text-[10px] font-bold bg-slate-800 px-2 py-0.5 rounded text-slate-400 border border-slate-700">{triggers.length}</span>
+                                </div>
+                                <div className="space-y-2 max-h-56 overflow-y-auto custom-scrollbar pr-1">
+                                    {triggers.length === 0 ? <div className="text-center py-6 text-slate-600 text-xs font-medium dashed-border rounded-lg border border-dashed border-slate-800">No triggers. Draw on video.</div> : 
+                                    triggers.map(t => (
+                                        <div key={t.id} className="flex items-center justify-between bg-slate-800/40 p-3 rounded-lg border border-slate-700/50 hover:border-emerald-500/30 transition group hover:bg-slate-800">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-3 h-3 rounded-full shadow-lg ring-2 ring-white/5" style={{ backgroundColor: rgbToHex(t.color) }}></div>
+                                                <span className="text-xs font-bold text-slate-200">{t.label}</span>
+                                            </div>
+                                            <button onClick={() => setTriggers(triggers.filter(tr => tr.id !== t.id))} className="text-slate-600 hover:text-red-400 transition-colors"><Icon name="trash-2" size={14} /></button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Modal: New Trigger */}
+                        {showTriggerModal && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-scale">
+                                <div className="bg-charcoal border border-slate-700 p-6 rounded-2xl shadow-2xl w-full max-w-sm relative overflow-hidden ring-1 ring-white/10">
+                                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-teal-500"></div>
+                                    <h3 className="text-lg font-bold mb-6 flex items-center gap-2 text-white">
+                                        <div className="p-1.5 bg-emerald-500/20 rounded-lg"><Icon name="scan-search" size={20} className="text-emerald-400" /></div>
+                                        New Event Trigger
+                                    </h3>
+                                    
+                                    <div className="mb-6 space-y-2">
+                                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Detected Color</label>
+                                        <div className="flex items-center gap-4 p-4 bg-slate-900 rounded-xl border border-slate-800">
+                                            <div className="w-12 h-12 rounded-lg shadow-lg ring-2 ring-white/5" style={{ backgroundColor: tempTriggerColor ? rgbToHex(tempTriggerColor) : '#000' }} />
+                                            <div className="flex flex-col gap-1">
+                                                <span className="font-mono text-base font-bold text-white tracking-wider">{tempTriggerColor ? rgbToHex(tempTriggerColor) : '...'}</span>
+                                                <span className="text-[10px] text-slate-500 font-medium">Matches this pixel color</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="mb-8">
+                                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Event Name</label>
+                                        <input 
+                                            type="text" 
+                                            value={newTriggerName}
+                                            onChange={(e) => setNewTriggerName(e.target.value)}
+                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition shadow-inner"
+                                            placeholder="e.g. Six, Wicket..."
+                                        />
+                                    </div>
+                                    
+                                    <div className="flex gap-3">
+                                        <button onClick={() => { setShowTriggerModal(false); setCurrentRect(null); }} className="flex-1 py-3 text-sm font-bold text-slate-400 hover:text-white transition rounded-lg hover:bg-slate-800 border border-transparent hover:border-slate-700">
+                                            Cancel
+                                        </button>
+                                        <button onClick={saveTrigger} 
+                                            className="flex-[2] py-3 bg-brand-500 hover:bg-brand-400 text-black rounded-lg text-sm font-bold transition shadow-lg shadow-emerald-900/20 flex items-center justify-center gap-2 transform hover:-translate-y-0.5">
+                                            <Icon name="check" size={16} />
+                                            Save Trigger
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
