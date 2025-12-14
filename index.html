@@ -404,7 +404,7 @@
                 scanRequestRef.current = requestAnimationFrame(processLoop);
             };
 
-            // --- EXPORT LOGIC (WebM + Seeking Fix) ---
+            // --- EXPORT LOGIC (WebM + Native Resolution + Stability) ---
             const exportHighlights = async () => {
                 if (highlights.length === 0 || !videoRef.current) return;
                 setIsExporting(true);
@@ -422,7 +422,7 @@
                 // Ensure same resolution as source video
                 exportCanvas.width = video.videoWidth; 
                 exportCanvas.height = video.videoHeight;
-                const ctx = exportCanvas.getContext('2d', { alpha: false }); 
+                const ctx = exportCanvas.getContext('2d', { alpha: false, desynchronized: true }); // Optimized context
 
                 let audioStream;
                 if (video.captureStream) audioStream = video.captureStream();
@@ -434,21 +434,23 @@
                 }
 
                 const audioTracks = audioStream.getAudioTracks();
-                const canvasStream = exportCanvas.captureStream(60); 
+                
+                // STABILITY FIX: Capture at 30 FPS.
+                const canvasStream = exportCanvas.captureStream(30); 
+                
                 const finalStream = new MediaStream([
                     ...canvasStream.getVideoTracks(),
                     ...(audioTracks.length > 0 ? [audioTracks[0]] : [])
                 ]);
 
-                // FORCE WEBM (VP9/VP8) for best browser support
                 let mimeType = "video/webm;codecs=vp9,opus"; 
                 if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = "video/webm;codecs=vp8,opus";
                 if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = "video/webm"; 
 
-                // 10 Mbps for High Quality
+                // STABILITY FIX: 6 Mbps
                 const recorder = new MediaRecorder(finalStream, { 
                     mimeType, 
-                    videoBitsPerSecond: 10000000 
+                    videoBitsPerSecond: 6000000 
                 });
 
                 const chunks = [];
@@ -456,8 +458,8 @@
                     if (e.data.size > 0) chunks.push(e.data);
                 };
 
-                // Request data more frequently to keep memory usage smooth
-                recorder.start(1000);
+                // Larger chunk size (2s) to reduce IO overhead
+                recorder.start(2000);
                 recorder.pause();
 
                 const sortedHighlights = [...highlights].sort((a, b) => a.time - b.time);
@@ -538,7 +540,6 @@
                         }, 3000); 
                     });
 
-                    // Ensure video is strictly ready
                     if (video.readyState < 3) {
                        await new Promise(resolve => {
                            const onCanPlay = () => {
@@ -591,7 +592,6 @@
                 cancelAnimationFrame(animationFrameId);
                 recorder.stop();
                 
-                // IMPORTANT: Wait for stop, then patch duration, then download
                 await new Promise(resolve => { recorder.onstop = resolve; });
 
                 const rawBlob = new Blob(chunks, { type: mimeType });
@@ -692,7 +692,7 @@
                                           <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
                                         </div>
                                         <span className="text-xs font-mono font-bold text-emerald-400 uppercase tracking-widest">
-                                            {isExporting ? 'Exporting' : 'Scanning'} {Math.round(progress)}%
+                                            {isExporting ? 'Exporting WebM' : 'Scanning'} {Math.round(progress)}%
                                         </span>
                                     </div>
                                     {isScanning && (
